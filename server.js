@@ -16,7 +16,7 @@ var gameType = 2;
 var roomId = 0;
 var records = [];
 var round = 0; // 0 = reset, 1 = betting, 2 = start crash, 3 = game over
-var roundDelayCount = [4, 11, 999, 6];
+var roundDelayCount = [3, 10, 999, 5];
 var roundCount = 0;
 var roundCrashValue = 0;
 var currentCrashValue = 0;
@@ -208,7 +208,6 @@ function roomInfoRequest() {
     }
 
     roomInfo = {
-        betOdds: percentage,
         betLimit: 10000,
         recordList: records,
     }
@@ -252,7 +251,7 @@ function roomListRequest() {
     return response;
 }
 
-function setBetRequest(count, bet) {
+function setBetRequest(bet) {
     awardBase = bet;
     gameCode = "#" + generateRandomString(6);
     balance -= awardBase;
@@ -359,7 +358,7 @@ function startBetResponse() {
             subType: 100071,
             subData: {
                 errCode: 0,
-                opCode: "StarBet",
+                opCode: "StartBet",
                 roundCount: roundCount,
                 maxRoundCount: roundDelayCount[1],
             }
@@ -387,18 +386,14 @@ function bettingResponse() {
             subData: {
                 errCode: 0,
                 opCode: "Betting",
-                roundCount: roundCount,
-                maxRoundCount: roundDelayCount[2],
                 currentCrashValue: currentCrashValue,
             }
         }
     }
 
-    console.log(currentCrashValue + " >>>  " + roundCrashValue);
     if (currentCrashValue >= roundCrashValue) {
-        console.log("bomb!!");
         round += 1;
-        roundCount = 0;
+        roundCount = 1;
     }
 
     return response;
@@ -435,9 +430,9 @@ function commonIntervalInit() {
     // Keep the server running indefinitely
     setInterval(() => {
         roundCount += 1;
-        if (roundCount >= roundDelayCount[round]) {
+        if (roundCount > roundDelayCount[round]) {
             round += 1;
-            roundCount = 0;
+            roundCount = 1;
             // reset
             if (round > roundDelayCount.length - 1) {
                 round = 0;
@@ -446,34 +441,30 @@ function commonIntervalInit() {
 
         // reset action
         if (round == 0) {
-            console.log("reset round timer " + roundCount);
             let response = resetResponse();
-            if (wsocket && wsocket.readyState === WebSocket.OPEN) {
+            if (wsocket && wsocket.readyState === Websocket.OPEN) {
                 wsocket.send(JSON.stringify(response));
             }
         }
 
         // start betting action
         if (round == 1) {
-            console.log("start bet round timer " + roundCount);
             let response = startBetResponse();
-            if (wsocket && wsocket.readyState === WebSocket.OPEN) {
+            if (wsocket && wsocket.readyState === Websocket.OPEN) {
                 wsocket.send(JSON.stringify(response));
             }
         }
 
         if (round == 2) {
-            if (roundCount == 0) {
-                console.log("betting round timer " + roundCount);
+            if (roundCount == 1) {
                 generate();
             }
         }
 
         // game over action
         if (round == 3) {
-            console.log("game over round timer " + roundCount);
             let response = gameOverResponse();
-            if (wsocket && wsocket.readyState === WebSocket.OPEN) {
+            if (wsocket && wsocket.readyState === Websocket.OPEN) {
                 wsocket.send(JSON.stringify(response));
             }
         }
@@ -484,7 +475,7 @@ function betIntervalInit() {
     setInterval(() => {
         if (round == 2) {
             let response = bettingResponse();
-            if (wsocket && wsocket.readyState === WebSocket.OPEN) {
+            if (wsocket && wsocket.readyState === Websocket.OPEN) {
                 wsocket.send(JSON.stringify(response));
             }
         }
@@ -550,15 +541,8 @@ server.on("connection", (ws) => {
                 }
                 // set bet request
                 if (jsonContent.data.subData.opCode == "SetBet") {
-                    let count = jsonContent.data.subData.message.bombCount;
                     let bet = jsonContent.data.subData.message.bet;
-                    let response = setBetRequest(count, bet);
-                    ws.send(JSON.stringify(response));
-                }
-                // choose bet request
-                if (jsonContent.data.subData.opCode == "Spin") {
-                    let index = jsonContent.data.subData.message.index;
-                    let response = spinRequest(index);
+                    let response = setBetRequest(bet);
                     ws.send(JSON.stringify(response));
                 }
                 // cash out request
