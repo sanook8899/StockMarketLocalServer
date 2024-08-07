@@ -4,22 +4,21 @@ const server = new Websocket.Server({ port: 9900 });
 
 let wsocket; // Declare a variable to hold the WebSocket object
 
-var index = 0;
-var bombCount = 0;
 var balance = 0;
 var playerId = "";
 var increaseMoney = 0;
 var gameCode = "";
-var awardMoney = 0;
-var awardBase = 0;
 var gameType = 2;
 var roomId = 0;
-var records = [];
-var round = 0; // 0 = reset, 1 = betting, 2 = start crash, 3 = game over
-var roundDelayCount = [3, 10, 999, 5];
+var records = [[[0, 61, 73, 85, 87, 90, 91, 78, 71, 56, 40, 20, 12, 0, 0, 0, 12, 22, 35, 91], 91], [[91, 29, 52, 71, 91, 89, 86, 77, 55, 22, -0, -30, -47, -70, -71, -71, -55, -43, -12, -71], -71], [[-71, -37, -31, -27, -24, -22, -22, -27, -35, -44, -52, -59, -64, -68, -71, -70, -68, -61, -53, -22], -22], [[-22, -15, -15, -13, -13, -13, -13, -14, -15, -16, -17, -19, -20, -21, -21, -21, -21, -20, -19, -13], -13], [[-13, -33, -21, -17, -13, -13, -17, -21, -26, -34, -48, -55, -64, -69, -70, -70, -68, -57, -52, -70], -70], [[-70, -21, -17, -7, -4, -1, -1, -10, -17, -29, -44, -52, -61, -65, -67, -70, -67, -56, -49, -1], -1], [[-1, 27, 33, 38, 40, 40, 37, 36, 30, 25, 15, 12, 4, -0, 1, 1, 4, 6, 15, 40], 40], [[40, 9, 23, 37, 40, 40, 36, 29, 23, 9, -4, -21, -36, -44, -44, -39, -39, -25, -11, -44], -44], [[-44, -64, -52, -49, -47, -44, -44, -52, -57, -69, -78, -86, -92, -95, -100, -97, -97, -91, -80, -100], -100], [[-100, -79, -72, -69, -67, -68, -69, -70, -76, -79, -86, -92, -97, -97, -100, -99, -96, -94, -87, -67], -67]];
+var round = 0; // 0 = reset, 1 = betting, 2 = start, 3 = game over
+var roundDelayCount = [3, 10, 11, 5];
 var roundCount = 0;
-var roundCrashValue = 0;
-var currentCrashValue = 0;
+var currentTotalBetValue = [0, 0];
+var currentPlayerBetValue = [0, 0];
+
+var previousLastValue = -67;
+var currentValue = [];
 
 
 function generateRandomString(length) {
@@ -45,13 +44,6 @@ function generateRandomInt(length) {
 
     return randomString;
 }
-
-
-function generate() {
-    const min = 1.00;
-    const max = 5.00;
-    roundCrashValue = (Math.random() * (max - min) + min).toFixed(2);
-};
 
 function loginRequest() {
     playerId = generateRandomString(8);
@@ -108,11 +100,11 @@ function joinRoomRequest() {
         vals: {},
     }
 
-    betInfo = {
-        gameName: "Crash",
-        minBet: 2,
-        maxBet: 1000,
-    }
+    betInfo = [{
+        gameName: "Stock Market",
+        minBet: 1,
+        maxBet: 1024,
+    }]
 
     currencyInfo = {
         currencyId: 1,
@@ -124,14 +116,14 @@ function joinRoomRequest() {
         id: 3,
         data: {
             subType: 100005,
-            subData: {
+            subData: [{
                 gameType: gameType,
                 roomId: roomId,
                 errCode: 0,
                 balance: balance,
                 betInfo: betInfo,
                 currencyInfo: currencyInfo,
-            }
+            }]
         }
     }
 
@@ -150,11 +142,11 @@ function transferRequest() {
         id: 3,
         data: {
             subType: 100069,
-            subData: {
+            subData: [{
                 errCode: 0,
                 balance: balance,
                 increaseMoney: increaseMoney,
-            }
+            }]
         }
     }
 
@@ -169,31 +161,16 @@ function recordRequest() {
         vals: {},
     }
 
-    records = [
-        {
-            id: 321541,
-            bet: 2,
-            odds: 0.0,
-            winMoney:0,
-        },
-        {
-            id: 321541,
-            bet: 2,
-            odds: 1.5,
-            winMoney: 3,
-        },
-    ]
-
     response.vals = {
         type: 100000,
         id: 3,
         data: {
             subType: 100071,
-            subData: {
+            subData: [{
                 errCode: 0,
                 opCode: "GetRecords",
                 recordsInfo: records,
-            }
+            }]
         }
     }
 
@@ -208,7 +185,8 @@ function roomInfoRequest() {
     }
 
     roomInfo = {
-        betLimit: 10000,
+        minBet: 1,
+        maxBet: 1024,
         recordList: records,
     }
 
@@ -217,11 +195,11 @@ function roomInfoRequest() {
         id: 3,
         data: {
             subType: 100071,
-            subData: {
+            subData: [{
                 errCode: 0,
                 opCode: "SyncRoomInfo",
                 roomInfo: roomInfo,
-            }
+            }]
         }
     }
 
@@ -252,9 +230,20 @@ function roomListRequest() {
 }
 
 function setBetRequest(bet) {
-    awardBase = bet;
+    // validate bet
+    if (bet[0] != 0 && currentPlayerBetValue[1] == 0 || bet[1] != 0 && currentPlayerBetValue[0] == 0) {
+        currentPlayerBetValue[0] += bet[0];
+        currentPlayerBetValue[1] += bet[1];
+        currentTotalBetValue[0] += bet[0];
+        currentTotalBetValue[1] += bet[1];
+    }
+    else {
+        return;
+    }
+   
     gameCode = "#" + generateRandomString(6);
-    balance -= awardBase;
+    balance -= bet[0];
+    balance -= bet[1];
 
     let response = {
         errCode: 0,
@@ -263,31 +252,28 @@ function setBetRequest(bet) {
     }
 
     betInfo = {
-        bet: awardBase,
+        bet: currentPlayerBetValue,
         balance: balance,
-        gameCode : gameCode,
     }
     response.vals = {
         type: 100000,
         id: 3,
         data: {
             subType: 100071,
-            subData: {
+            subData: [{
                 errCode: 0,
                 opCode: "SetBet",
                 betInfo: betInfo,
-            }
+            }]
         }
     }
+
+    globalBetResponse();
 
     return response;
 }
 
-function cashOutRequest() {
-    let gameOver = true;
-    awardMoney = currentCrashValue * awardBase;
-    increaseMoney = awardMoney;
-    balance += awardMoney;
+function globalBetResponse() {
 
     let response = {
         errCode: 0,
@@ -296,27 +282,24 @@ function cashOutRequest() {
     }
 
     betInfo = {
-        errCode: 0,
-        cashOutValue: currentCrashValue,
-        awardMoney: awardMoney,
-        awardIndex: index,
-        gameOver: gameOver,
+        bet: currentTotalBetValue,
     }
     response.vals = {
         type: 100000,
         id: 3,
         data: {
             subType: 100071,
-            subData: {
+            subData: [{
                 errCode: 0,
-                opCode: "CashOut",
+                opCode: "GlobalBet",
                 betInfo: betInfo,
-            }
+            }]
         }
     }
-    return response;
+    if (wsocket && wsocket.readyState === Websocket.OPEN) {
+        wsocket.send(JSON.stringify(response));
+    }
 }
-
 
 function resetResponse() {
     currentCrashValue = parseFloat(1.00);
@@ -332,12 +315,13 @@ function resetResponse() {
         id: 3,
         data: {
             subType: 100071,
-            subData: {
+            subData: [{
                 errCode: 0,
                 opCode: "Reset",
                 roundCount: roundCount,
                 maxRoundCount: roundDelayCount[0],
-            }
+                records: records,
+            }]
         }
     }
 
@@ -356,22 +340,20 @@ function startBetResponse() {
         id: 3,
         data: {
             subType: 100071,
-            subData: {
+            subData: [{
                 errCode: 0,
                 opCode: "StartBet",
                 roundCount: roundCount,
                 maxRoundCount: roundDelayCount[1],
-            }
+            }]
         }
     }
 
     return response;
 }
 
-function bettingResponse() {
-    let value = parseFloat(currentCrashValue) + 0.01;
-    currentCrashValue = value.toFixed(2);
-
+function resultResponse(value) {
+    console.log("resultResponse", value);
     let response = {
         errCode: 0,
         errMsg: "success",
@@ -383,20 +365,71 @@ function bettingResponse() {
         id: 3,
         data: {
             subType: 100071,
-            subData: {
+            subData: [{
                 errCode: 0,
-                opCode: "Betting",
-                currentCrashValue: currentCrashValue,
-            }
+                opCode: "Result",
+                value: value,
+            }]
         }
     }
 
-    if (currentCrashValue >= roundCrashValue) {
-        round += 1;
-        roundCount = 1;
+    if (wsocket && wsocket.readyState === Websocket.OPEN) {
+        wsocket.send(JSON.stringify(response));
+    }
+}
+
+function calculateWinLose() {
+    let totalBet = currentPlayerBetValue[0] + currentPlayerBetValue[1];
+    let playerWinlose = 0;
+    if (totalBet > 0) {
+        if (previousLastValue > 0) { // positive
+            if (currentPlayerBetValue[0] > 0) {
+                playerWinlose = currentPlayerBetValue[0] + (currentPlayerBetValue[0] * (previousLastValue / 100));
+            }
+            else {
+                playerWinlose = currentPlayerBetValue[1] - (currentPlayerBetValue[1] * (previousLastValue / 100));
+            }
+        }
+        else {
+            if (currentPlayerBetValue[1] > 0) {
+                playerWinlose = currentPlayerBetValue[1] + (currentPlayerBetValue[1] * (-previousLastValue / 100));
+            }
+            else {
+                playerWinlose = currentPlayerBetValue[0] - (currentPlayerBetValue[0] * (-previousLastValue / 100));
+            }
+        }
+    }
+    playerWinlose = Math.floor(playerWinlose);
+    
+    increaseMoney = playerWinlose;
+    balance += playerWinlose;
+
+    let response = {
+        errCode: 0,
+        errMsg: "success",
+        vals: {},
     }
 
-    return response;
+    betInfo = {
+        cashOutValue: previousLastValue,
+        awardMoney: playerWinlose,
+    }
+    response.vals = {
+        type: 100000,
+        id: 3,
+        data: {
+            subType: 100071,
+            subData: [{
+                errCode: 0,
+                opCode: "CashOut",
+                betInfo: betInfo,
+            }]
+        }
+    }
+
+    if (wsocket && wsocket.readyState === Websocket.OPEN) {
+        wsocket.send(JSON.stringify(response));
+    }
 }
 
 function gameOverResponse() {
@@ -411,13 +444,14 @@ function gameOverResponse() {
         id: 3,
         data: {
             subType: 100071,
-            subData: {
+            subData: [{
                 errCode: 0,
                 opCode: "GameOver",
                 roundCount: roundCount,
                 maxRoundCount: roundDelayCount[3],
-                roundCrashValue: roundCrashValue,
-            }
+                records: records,
+                endValue: previousLastValue,
+            }]
         }
     }
 
@@ -441,58 +475,123 @@ function commonIntervalInit() {
 
         // reset action
         if (round == 0) {
-            let response = resetResponse();
-            if (wsocket && wsocket.readyState === Websocket.OPEN) {
-                wsocket.send(JSON.stringify(response));
+            if (roundCount == 1) {
+                currentPlayerBetValue = [0, 0];
+                currentTotalBetValue = [0, 0];
+                let response = resetResponse();
+                if (wsocket && wsocket.readyState === Websocket.OPEN) {
+                    wsocket.send(JSON.stringify(response));
+                }
             }
         }
 
         // start betting action
         if (round == 1) {
-            let response = startBetResponse();
-            if (wsocket && wsocket.readyState === Websocket.OPEN) {
-                wsocket.send(JSON.stringify(response));
+            if (roundCount == 1) {
+                let response = startBetResponse();
+                if (wsocket && wsocket.readyState === Websocket.OPEN) {
+                    wsocket.send(JSON.stringify(response));
+                }
             }
         }
 
         if (round == 2) {
             if (roundCount == 1) {
-                generate();
+                let randomValue = generateRandomValue(-100, 100);
+                while (randomValue == previousLastValue) {
+                    randomValue = generateRandomValue(-100, 100);
+                }
+                generateSmoothValues(previousLastValue, randomValue, 20);
+                callValues(500);
             }
         }
 
         // game over action
         if (round == 3) {
-            let response = gameOverResponse();
-            if (wsocket && wsocket.readyState === Websocket.OPEN) {
-                wsocket.send(JSON.stringify(response));
+
+            if (roundCount == 1) {
+                records.push([currentValue, previousLastValue]);
+                if (records.length > 10) {
+                    records.shift();
+                }
+
+                calculateWinLose();
+                let response = gameOverResponse();
+                if (wsocket && wsocket.readyState === Websocket.OPEN) {
+                    wsocket.send(JSON.stringify(response));
+                }
             }
         }
     }, 1000);
 }
 
-function betIntervalInit() {
-    setInterval(() => {
-        if (round == 2) {
-            let response = bettingResponse();
-            if (wsocket && wsocket.readyState === Websocket.OPEN) {
-                wsocket.send(JSON.stringify(response));
-            }
-        }
-    }, 100);
+function generateSmoothValues(firstValue, lastValue, numValues) {
+    currentValue = [];
+    currentValue = [firstValue];
+    const range = Math.abs(lastValue - firstValue) / 2;
+    const midPoint = (lastValue + firstValue) / 2;
+    const waveLength = numValues - 1;
+
+    for (let i = 1; i < numValues - 1; i++) {
+        const sineWave = Math.sin((i / waveLength) * Math.PI * 2); // Generate sine wave values
+        const noise = (Math.random() - 0.5) * range * 0.2; // Add slight random noise
+        let newValue = midPoint + sineWave * range + noise;
+        // Ensure newValue is within the range of the minimum and maximum of firstValue and lastValue
+        newValue = Math.max(Math.min(firstValue, lastValue), Math.min(newValue, Math.max(firstValue, lastValue)));
+        // Round the newValue
+        newValue = Math.ceil(newValue);
+        currentValue.push(newValue);
+    }
+
+    currentValue.push(lastValue);
+    previousLastValue = lastValue;
 }
+
+function callValues(interval) {
+    let index = 0;
+    const intervalId = setInterval(() => {
+
+        //
+        if (index <= currentValue.length - 1) {
+            resultResponse(currentValue[index]);
+        }
+
+        if (index >= currentValue.length - 1) {
+            clearInterval(intervalId);
+
+            previousLastValue = currentValue[19];
+            return;
+        }
+        index++;
+    }, interval);
+}
+
+function generateRandomValue(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function test() {
+    for (let i = 0; i < 10; i++) {
+        let randomValue = generateRandomValue(-100, 100);
+        while (randomValue == previousLastValue) {
+            randomValue = generateRandomValue(-100, 100);
+        }
+        generateSmoothValues(previousLastValue, generateRandomValue(-100, 100), 20);
+    }
+    
+}
+
+//test();
 
 // Call your custom function independently
 commonIntervalInit();
-betIntervalInit();
 
 server.on("connection", (ws) => {
     wsocket = ws;
 
-    ws.send("4515ce54-c62a-43ed-964e-0f4d4dc402b3");
+    // ws.send("4515ce54-c62a-43ed-964e-0f4d4dc402b3");
 
     ws.on("message", (message) => {
-        console.log("message " + message);
         const jsonContent = JSON.parse(message);
 
         // login request
@@ -515,39 +614,35 @@ server.on("connection", (ws) => {
 
         if (jsonContent.type == 100000) {
             // join Room request
-            if (jsonContent.data.subType == 100004) {
-                roomId = jsonContent.data.subData.roomId;
+
+            if (jsonContent.data[0].subType == 100004) {
+                roomId = jsonContent.data[0].subData.roomId;
                 let response = joinRoomRequest();
                 ws.send(JSON.stringify(response));
             }
 
             // transfer info request
-            if (jsonContent.data.subType == 100068) {
+            if (jsonContent.data[0].subType == 100068) {
                 let response = transferRequest();
                 ws.send(JSON.stringify(response));
             }
 
             // custom request
-            if (jsonContent.data.subType == 100070) {
+            if (jsonContent.data[0].subType == 100070) {
                 // get records request
-                if (jsonContent.data.subData.opCode == "GetRecords") {
+                if (jsonContent.data[0].subData[0].opCode == "GetRecords") {
                     let response = recordRequest();
                     ws.send(JSON.stringify(response));
                 }
                 // sync room info request
-                if (jsonContent.data.subData.opCode == "SyncRoomInfo") {
+                if (jsonContent.data[0].subData[0].opCode == "SyncRoomInfo") {
                     let response = roomInfoRequest();
                     ws.send(JSON.stringify(response));
                 }
                 // set bet request
-                if (jsonContent.data.subData.opCode == "SetBet") {
-                    let bet = jsonContent.data.subData.message.bet;
+                if (jsonContent.data[0].subData[0].opCode == "SetBet") {
+                    let bet = jsonContent.data[0].subData[0].message.bet;
                     let response = setBetRequest(bet);
-                    ws.send(JSON.stringify(response));
-                }
-                // cash out request
-                if (jsonContent.data.subData.opCode == "CashOut") {
-                    let response = cashOutRequest();
                     ws.send(JSON.stringify(response));
                 }
             }
