@@ -367,7 +367,7 @@ function resultResponse(value) {
             subType: 100071,
             subData: [{
                 errCode: 0,
-                opCode: "Result",
+                opCode: "Betting",
                 value: value,
             }]
         }
